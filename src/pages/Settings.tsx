@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -11,12 +10,13 @@ import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
-import { Settings as SettingsIcon, Store, Receipt, Users, Bell } from 'lucide-react';
+import { Settings as SettingsIcon, Store, Receipt, Users, Bell, Upload } from 'lucide-react';
 
 const Settings = () => {
   const { userRole } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [logoFile, setLogoFile] = useState<File | null>(null);
 
   const { data: settings } = useQuery({
     queryKey: ['settings'],
@@ -36,6 +36,35 @@ const Settings = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['settings'] });
       toast({ title: "Success", description: "Settings updated successfully" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const uploadLogoMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `logo-${Date.now()}.${fileExt}`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from('company-assets')
+        .upload(fileName, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('company-assets')
+        .getPublicUrl(fileName);
+
+      // Update the company_logo setting
+      await updateSettingMutation.mutateAsync({ key: 'company_logo', value: publicUrl });
+      
+      return publicUrl;
+    },
+    onSuccess: () => {
+      setLogoFile(null);
+      toast({ title: "Success", description: "Logo uploaded successfully" });
     },
     onError: (error: any) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -63,6 +92,12 @@ const Settings = () => {
     updates.forEach(update => {
       updateSettingMutation.mutate(update);
     });
+  };
+
+  const handleLogoUpload = () => {
+    if (logoFile) {
+      uploadLogoMutation.mutate(logoFile);
+    }
   };
 
   return (
@@ -147,6 +182,40 @@ const Settings = () => {
                       placeholder="www.yourstore.com"
                     />
                   </div>
+                </div>
+
+                {/* Logo Upload Section */}
+                <div className="space-y-4 border-t pt-4">
+                  <Label>Company Logo</Label>
+                  {getSetting('company_logo') && (
+                    <div className="mb-4">
+                      <img 
+                        src={getSetting('company_logo')} 
+                        alt="Current Logo" 
+                        className="max-h-20 object-contain border rounded"
+                      />
+                      <p className="text-sm text-gray-600 mt-1">Current logo</p>
+                    </div>
+                  )}
+                  <div className="flex items-center space-x-4">
+                    <Input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => setLogoFile(e.target.files?.[0] || null)}
+                      className="flex-1"
+                    />
+                    <Button
+                      type="button"
+                      onClick={handleLogoUpload}
+                      disabled={!logoFile || uploadLogoMutation.isPending}
+                    >
+                      <Upload className="h-4 w-4 mr-2" />
+                      {uploadLogoMutation.isPending ? 'Uploading...' : 'Upload Logo'}
+                    </Button>
+                  </div>
+                  <p className="text-sm text-gray-600">
+                    Upload a logo for your receipts. Recommended size: 200x60px
+                  </p>
                 </div>
 
                 <Button type="submit" disabled={updateSettingMutation.isPending}>

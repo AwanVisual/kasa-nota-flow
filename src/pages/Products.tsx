@@ -15,6 +15,7 @@ import { Plus, Edit, Package, Search } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
+import CategoryInput from '@/components/CategoryInput';
 
 const Products = () => {
   const { userRole } = useAuth();
@@ -112,128 +113,131 @@ const Products = () => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold text-gray-900">Products</h1>
-        {canManage && (
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button onClick={() => setEditingProduct(null)}>
-                <Plus className="h-4 w-4 mr-2" />
-                Add Product
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>
-                  {editingProduct ? 'Edit Product' : 'Add New Product'}
-                </DialogTitle>
-              </DialogHeader>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="name">Product Name</Label>
-                    <Input
-                      id="name"
-                      name="name"
-                      defaultValue={editingProduct?.name}
-                      required
-                    />
+        <div className="flex gap-2">
+          {canManage && <CategoryInput />}
+          {canManage && (
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+              <DialogTrigger asChild>
+                <Button onClick={() => setEditingProduct(null)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Product
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>
+                    {editingProduct ? 'Edit Product' : 'Add New Product'}
+                  </DialogTitle>
+                </DialogHeader>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="name">Product Name</Label>
+                      <Input
+                        id="name"
+                        name="name"
+                        defaultValue={editingProduct?.name}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="sku">SKU</Label>
+                      <Input
+                        id="sku"
+                        name="sku"
+                        defaultValue={editingProduct?.sku}
+                        required
+                      />
+                    </div>
                   </div>
+                  
                   <div>
-                    <Label htmlFor="sku">SKU</Label>
-                    <Input
-                      id="sku"
-                      name="sku"
-                      defaultValue={editingProduct?.sku}
-                      required
-                    />
+                    <Label htmlFor="category_id">Category</Label>
+                    <Select name="category_id" defaultValue={editingProduct?.category_id || "no-category"}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="no-category">No Category</SelectItem>
+                        {categories?.map((category) => (
+                          <SelectItem key={category.id} value={category.id}>
+                            {category.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
-                </div>
-                
-                <div>
-                  <Label htmlFor="category_id">Category</Label>
-                  <Select name="category_id" defaultValue={editingProduct?.category_id || "no-category"}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="no-category">No Category</SelectItem>
-                      {categories?.map((category) => (
-                        <SelectItem key={category.id} value={category.id}>
-                          {category.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="price">Selling Price</Label>
-                    <Input
-                      id="price"
-                      name="price"
-                      type="number"
-                      step="0.01"
-                      defaultValue={editingProduct?.price}
-                      required
-                    />
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="price">Selling Price</Label>
+                      <Input
+                        id="price"
+                        name="price"
+                        type="number"
+                        step="0.01"
+                        defaultValue={editingProduct?.price}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="cost">Cost Price</Label>
+                      <Input
+                        id="cost"
+                        name="cost"
+                        type="number"
+                        step="0.01"
+                        defaultValue={editingProduct?.cost}
+                        required
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <Label htmlFor="cost">Cost Price</Label>
-                    <Input
-                      id="cost"
-                      name="cost"
-                      type="number"
-                      step="0.01"
-                      defaultValue={editingProduct?.cost}
-                      required
-                    />
-                  </div>
-                </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="stock_quantity">Stock Quantity</Label>
+                      <Input
+                        id="stock_quantity"
+                        name="stock_quantity"
+                        type="number"
+                        defaultValue={editingProduct?.stock_quantity || 0}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="min_stock_level">Min Stock Level</Label>
+                      <Input
+                        id="min_stock_level"
+                        name="min_stock_level"
+                        type="number"
+                        defaultValue={editingProduct?.min_stock_level || 10}
+                        required
+                      />
+                    </div>
+                  </div>
+
                   <div>
-                    <Label htmlFor="stock_quantity">Stock Quantity</Label>
-                    <Input
-                      id="stock_quantity"
-                      name="stock_quantity"
-                      type="number"
-                      defaultValue={editingProduct?.stock_quantity || 0}
-                      required
+                    <Label htmlFor="description">Description</Label>
+                    <Textarea
+                      id="description"
+                      name="description"
+                      defaultValue={editingProduct?.description}
                     />
                   </div>
-                  <div>
-                    <Label htmlFor="min_stock_level">Min Stock Level</Label>
-                    <Input
-                      id="min_stock_level"
-                      name="min_stock_level"
-                      type="number"
-                      defaultValue={editingProduct?.min_stock_level || 10}
-                      required
-                    />
+
+                  <div className="flex justify-end space-x-2">
+                    <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                      Cancel
+                    </Button>
+                    <Button type="submit">
+                      {editingProduct ? 'Update' : 'Create'} Product
+                    </Button>
                   </div>
-                </div>
-
-                <div>
-                  <Label htmlFor="description">Description</Label>
-                  <Textarea
-                    id="description"
-                    name="description"
-                    defaultValue={editingProduct?.description}
-                  />
-                </div>
-
-                <div className="flex justify-end space-x-2">
-                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button type="submit">
-                    {editingProduct ? 'Update' : 'Create'} Product
-                  </Button>
-                </div>
-              </form>
-            </DialogContent>
-          </Dialog>
-        )}
+                </form>
+              </DialogContent>
+            </Dialog>
+          )}
+        </div>
       </div>
 
       <Card>

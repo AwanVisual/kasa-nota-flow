@@ -178,7 +178,7 @@ const Cashier = () => {
         description: `Sale ${sale.sale_number} completed successfully!` 
       });
       
-      // Generate and download receipt
+      // Generate and download receipt with updated settings
       generateReceipt(sale);
     },
     onError: (error: any) => {
@@ -187,12 +187,21 @@ const Cashier = () => {
   });
 
   const generateReceipt = (sale: any) => {
+    const logoUrl = settings?.company_logo ? settings.company_logo : '';
+    const storeName = settings?.store_name || 'Your Store';
+    const storeAddress = settings?.store_address || 'Store Address';
+    const storePhone = settings?.store_phone || 'Phone Number';
+    const receiptHeader = settings?.receipt_header || 'Thank you for your purchase!';
+    const receiptFooter = settings?.receipt_footer || 'Have a great day!';
+    const showTaxDetails = settings?.show_tax_details === 'true';
+    
     const receiptContent = `
       <div style="font-family: Arial, sans-serif; max-width: 300px; margin: 0 auto; padding: 20px;">
         <div style="text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px;">
-          <h2>${settings?.company_name || 'Your Company'}</h2>
-          <p>${settings?.company_address || 'Company Address'}</p>
-          <p>${settings?.company_phone || 'Phone Number'}</p>
+          ${logoUrl ? `<img src="${logoUrl}" alt="Logo" style="max-height: 60px; margin-bottom: 10px;" />` : ''}
+          <h2>${storeName}</h2>
+          <p>${storeAddress}</p>
+          <p>${storePhone}</p>
         </div>
         
         <div style="margin: 20px 0; text-align: center;">
@@ -228,10 +237,12 @@ const Cashier = () => {
             <span>Subtotal:</span>
             <span>${formatCurrency(subtotal)}</span>
           </div>
+          ${showTaxDetails ? `
           <div style="display: flex; justify-content: space-between;">
             <span>Tax (${taxRate}%):</span>
             <span>${formatCurrency(taxAmount)}</span>
           </div>
+          ` : ''}
           <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 18px;">
             <span>Total:</span>
             <span>${formatCurrency(total)}</span>
@@ -247,8 +258,8 @@ const Cashier = () => {
         </div>
         
         <div style="text-align: center; margin-top: 20px; border-top: 1px solid #000; padding-top: 10px;">
-          <p>${settings?.receipt_header || 'Thank you for your purchase!'}</p>
-          <p>${settings?.receipt_footer || 'Have a great day!'}</p>
+          <p>${receiptHeader}</p>
+          <p>${receiptFooter}</p>
         </div>
       </div>
     `;
@@ -264,6 +275,49 @@ const Cashier = () => {
       printWindow.document.close();
       printWindow.print();
     }
+  };
+
+  const addToCart = (product: any) => {
+    setCart(prev => {
+      const existing = prev.find(item => item.product.id === product.id);
+      if (existing) {
+        if (existing.quantity < product.stock_quantity) {
+          return prev.map(item =>
+            item.product.id === product.id
+              ? { ...item, quantity: item.quantity + 1 }
+              : item
+          );
+        } else {
+          toast({ title: "Error", description: "Not enough stock", variant: "destructive" });
+          return prev;
+        }
+      }
+      return [...prev, { product, quantity: 1 }];
+    });
+  };
+
+  const updateQuantity = (productId: string, newQuantity: number) => {
+    if (newQuantity <= 0) {
+      removeFromCart(productId);
+      return;
+    }
+
+    setCart(prev =>
+      prev.map(item => {
+        if (item.product.id === productId) {
+          if (newQuantity <= item.product.stock_quantity) {
+            return { ...item, quantity: newQuantity };
+          } else {
+            toast({ title: "Error", description: "Not enough stock", variant: "destructive" });
+          }
+        }
+        return item;
+      })
+    );
+  };
+
+  const removeFromCart = (productId: string) => {
+    setCart(prev => prev.filter(item => item.product.id !== productId));
   };
 
   return (
