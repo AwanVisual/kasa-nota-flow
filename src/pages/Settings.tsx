@@ -1,184 +1,291 @@
 
 import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Upload, Save, Building2, Receipt, Users, Bell } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/useAuth';
+import { Settings as SettingsIcon, Store, Receipt, Users, Bell } from 'lucide-react';
 
 const Settings = () => {
+  const { userRole } = useAuth();
   const { toast } = useToast();
-  const [companySettings, setCompanySettings] = useState({
-    name: 'Your Company Name',
-    address: 'Your Company Address',
-    phone: 'Your Phone Number',
-    taxRate: '11',
+  const queryClient = useQueryClient();
+
+  const { data: settings } = useQuery({
+    queryKey: ['settings'],
+    queryFn: async () => {
+      const { data } = await supabase.from('settings').select('*');
+      return data || [];
+    },
   });
 
-  const [receiptSettings, setReceiptSettings] = useState({
-    header: 'Thank you for your purchase!',
-    footer: 'Have a great day!',
-    showLogo: true,
+  const updateSettingMutation = useMutation({
+    mutationFn: async ({ key, value }: { key: string; value: string }) => {
+      const { error } = await supabase
+        .from('settings')
+        .upsert({ key, value }, { onConflict: 'key' });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['settings'] });
+      toast({ title: "Success", description: "Settings updated successfully" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
   });
 
-  const handleSaveCompany = () => {
-    toast({
-      title: "Settings saved",
-      description: "Company settings have been updated successfully.",
-    });
+  const getSetting = (key: string) => {
+    return settings?.find(s => s.key === key)?.value || '';
   };
 
-  const handleSaveReceipt = () => {
-    toast({
-      title: "Settings saved", 
-      description: "Receipt settings have been updated successfully.",
+  const handleSettingUpdate = (key: string, value: string) => {
+    updateSettingMutation.mutate({ key, value });
+  };
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    
+    // Update all form settings
+    const updates = Array.from(formData.entries()).map(([key, value]) => ({
+      key,
+      value: value.toString(),
+    }));
+
+    updates.forEach(update => {
+      updateSettingMutation.mutate(update);
     });
   };
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Settings</h1>
-        <p className="text-gray-600">Manage your system configuration</p>
+      <div className="flex items-center gap-2">
+        <SettingsIcon className="h-8 w-8" />
+        <div>
+          <h1 className="text-3xl font-bold">Settings</h1>
+          <p className="text-gray-600">Configure your POS system</p>
+        </div>
       </div>
 
-      <Tabs defaultValue="company" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="company">Company</TabsTrigger>
+      <Tabs defaultValue="store" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="store">Store Info</TabsTrigger>
           <TabsTrigger value="receipt">Receipt</TabsTrigger>
-          <TabsTrigger value="users">Users</TabsTrigger>
+          <TabsTrigger value="tax">Tax & Pricing</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="company" className="space-y-4">
+        <TabsContent value="store">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Building2 className="h-5 w-5" />
-                Company Information
+                <Store className="h-5 w-5" />
+                Store Information
               </CardTitle>
               <CardDescription>
-                Update your company details for receipts and invoices
+                Basic information about your store
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="company-name">Company Name</Label>
-                  <Input
-                    id="company-name"
-                    value={companySettings.name}
-                    onChange={(e) => setCompanySettings({...companySettings, name: e.target.value})}
+            <CardContent>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="store_name">Store Name</Label>
+                    <Input
+                      id="store_name"
+                      name="store_name"
+                      defaultValue={getSetting('store_name')}
+                      placeholder="Your Store Name"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="store_phone">Phone Number</Label>
+                    <Input
+                      id="store_phone"
+                      name="store_phone"
+                      defaultValue={getSetting('store_phone')}
+                      placeholder="+1 (555) 123-4567"
+                    />
+                  </div>
+                </div>
+                
+                <div>
+                  <Label htmlFor="store_address">Address</Label>
+                  <Textarea
+                    id="store_address"
+                    name="store_address"
+                    defaultValue={getSetting('store_address')}
+                    placeholder="123 Main St, City, State 12345"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="company-phone">Phone Number</Label>
-                  <Input
-                    id="company-phone"
-                    value={companySettings.phone}
-                    onChange={(e) => setCompanySettings({...companySettings, phone: e.target.value})}
-                  />
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="store_email">Email</Label>
+                    <Input
+                      id="store_email"
+                      name="store_email"
+                      type="email"
+                      defaultValue={getSetting('store_email')}
+                      placeholder="store@example.com"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="store_website">Website</Label>
+                    <Input
+                      id="store_website"
+                      name="store_website"
+                      defaultValue={getSetting('store_website')}
+                      placeholder="www.yourstore.com"
+                    />
+                  </div>
                 </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="company-address">Address</Label>
-                <Textarea
-                  id="company-address"
-                  value={companySettings.address}
-                  onChange={(e) => setCompanySettings({...companySettings, address: e.target.value})}
-                  rows={3}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="tax-rate">VAT/PPN Rate (%)</Label>
-                <Input
-                  id="tax-rate"
-                  type="number"
-                  value={companySettings.taxRate}
-                  onChange={(e) => setCompanySettings({...companySettings, taxRate: e.target.value})}
-                  className="w-32"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="logo-upload">Company Logo</Label>
-                <div className="flex items-center gap-4">
-                  <Input id="logo-upload" type="file" accept="image/*" className="flex-1" />
-                  <Button variant="outline" size="sm">
-                    <Upload className="h-4 w-4 mr-2" />
-                    Upload
-                  </Button>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Recommended size: 200x200px. Supported formats: JPG, PNG, SVG
-                </p>
-              </div>
-              <Button onClick={handleSaveCompany} className="w-full sm:w-auto">
-                <Save className="h-4 w-4 mr-2" />
-                Save Company Settings
-              </Button>
+
+                <Button type="submit" disabled={updateSettingMutation.isPending}>
+                  Save Store Information
+                </Button>
+              </form>
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="receipt" className="space-y-4">
+        <TabsContent value="receipt">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Receipt className="h-5 w-5" />
-                Receipt Customization
+                Receipt Settings
               </CardTitle>
               <CardDescription>
-                Customize the appearance of your transaction receipts
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="receipt-header">Receipt Header</Label>
-                <Input
-                  id="receipt-header"
-                  value={receiptSettings.header}
-                  onChange={(e) => setReceiptSettings({...receiptSettings, header: e.target.value})}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="receipt-footer">Receipt Footer</Label>
-                <Input
-                  id="receipt-footer"
-                  value={receiptSettings.footer}
-                  onChange={(e) => setReceiptSettings({...receiptSettings, footer: e.target.value})}
-                />
-              </div>
-              <Button onClick={handleSaveReceipt} className="w-full sm:w-auto">
-                <Save className="h-4 w-4 mr-2" />
-                Save Receipt Settings
-              </Button>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="users" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Users className="h-5 w-5" />
-                User Management
-              </CardTitle>
-              <CardDescription>
-                Manage user roles and permissions
+                Customize how receipts appear to customers
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="text-center py-8 text-muted-foreground">
-                User management will be implemented here
-              </div>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                  <Label htmlFor="receipt_header">Receipt Header</Label>
+                  <Textarea
+                    id="receipt_header"
+                    name="receipt_header"
+                    defaultValue={getSetting('receipt_header')}
+                    placeholder="Thank you for shopping with us!"
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="receipt_footer">Receipt Footer</Label>
+                  <Textarea
+                    id="receipt_footer"
+                    name="receipt_footer"
+                    defaultValue={getSetting('receipt_footer')}
+                    placeholder="Visit us again soon!"
+                  />
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="show_tax_details"
+                    defaultChecked={getSetting('show_tax_details') === 'true'}
+                    onCheckedChange={(checked) => 
+                      handleSettingUpdate('show_tax_details', checked.toString())
+                    }
+                  />
+                  <Label htmlFor="show_tax_details">Show tax details on receipt</Label>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="print_receipt_auto"
+                    defaultChecked={getSetting('print_receipt_auto') === 'true'}
+                    onCheckedChange={(checked) => 
+                      handleSettingUpdate('print_receipt_auto', checked.toString())
+                    }
+                  />
+                  <Label htmlFor="print_receipt_auto">Auto-print receipt after sale</Label>
+                </div>
+
+                <Button type="submit" disabled={updateSettingMutation.isPending}>
+                  Save Receipt Settings
+                </Button>
+              </form>
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="notifications" className="space-y-4">
+        <TabsContent value="tax">
+          <Card>
+            <CardHeader>
+              <CardTitle>Tax & Pricing Settings</CardTitle>
+              <CardDescription>
+                Configure tax rates and pricing options
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="tax_rate">Tax Rate (%)</Label>
+                    <Input
+                      id="tax_rate"
+                      name="tax_rate"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="100"
+                      defaultValue={getSetting('tax_rate') || '10'}
+                      placeholder="10.00"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="currency">Currency</Label>
+                    <Input
+                      id="currency"
+                      name="currency"
+                      defaultValue={getSetting('currency') || 'IDR'}
+                      placeholder="IDR"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="tax_inclusive"
+                    defaultChecked={getSetting('tax_inclusive') === 'true'}
+                    onCheckedChange={(checked) => 
+                      handleSettingUpdate('tax_inclusive', checked.toString())
+                    }
+                  />
+                  <Label htmlFor="tax_inclusive">Tax inclusive pricing</Label>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="round_amounts"
+                    defaultChecked={getSetting('round_amounts') === 'true'}
+                    onCheckedChange={(checked) => 
+                      handleSettingUpdate('round_amounts', checked.toString())
+                    }
+                  />
+                  <Label htmlFor="round_amounts">Round amounts to nearest whole number</Label>
+                </div>
+
+                <Button type="submit" disabled={updateSettingMutation.isPending}>
+                  Save Tax Settings
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="notifications">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -190,8 +297,53 @@ const Settings = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="text-center py-8 text-muted-foreground">
-                Notification settings will be implemented here
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label>Low stock alerts</Label>
+                    <p className="text-sm text-gray-600">
+                      Get notified when products are running low
+                    </p>
+                  </div>
+                  <Switch
+                    defaultChecked={getSetting('low_stock_alerts') === 'true'}
+                    onCheckedChange={(checked) => 
+                      handleSettingUpdate('low_stock_alerts', checked.toString())
+                    }
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label>Daily sales summary</Label>
+                    <p className="text-sm text-gray-600">
+                      Receive daily sales reports via email
+                    </p>
+                  </div>
+                  <Switch
+                    defaultChecked={getSetting('daily_sales_summary') === 'true'}
+                    onCheckedChange={(checked) => 
+                      handleSettingUpdate('daily_sales_summary', checked.toString())
+                    }
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="low_stock_threshold">Low Stock Threshold</Label>
+                  <Input
+                    id="low_stock_threshold"
+                    type="number"
+                    min="1"
+                    defaultValue={getSetting('low_stock_threshold') || '10'}
+                    onChange={(e) => 
+                      handleSettingUpdate('low_stock_threshold', e.target.value)
+                    }
+                    placeholder="10"
+                  />
+                  <p className="text-sm text-gray-600 mt-1">
+                    Alert when stock quantity is below this number
+                  </p>
+                </div>
               </div>
             </CardContent>
           </Card>
