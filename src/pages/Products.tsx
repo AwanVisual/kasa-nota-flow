@@ -83,10 +83,12 @@ const Products = () => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     
+    const categoryId = formData.get('category_id') as string;
+    
     const productData = {
       name: formData.get('name') as string,
       sku: formData.get('sku') as string,
-      category_id: formData.get('category_id') as string || null,
+      category_id: categoryId === 'no-category' ? null : categoryId,
       price: parseFloat(formData.get('price') as string),
       cost: parseFloat(formData.get('cost') as string),
       stock_quantity: parseInt(formData.get('stock_quantity') as string),
@@ -148,12 +150,12 @@ const Products = () => {
                 
                 <div>
                   <Label htmlFor="category_id">Category</Label>
-                  <Select name="category_id" defaultValue={editingProduct?.category_id || ""}>
+                  <Select name="category_id" defaultValue={editingProduct?.category_id || "no-category"}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select category" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">No Category</SelectItem>
+                      <SelectItem value="no-category">No Category</SelectItem>
                       {categories?.map((category) => (
                         <SelectItem key={category.id} value={category.id}>
                           {category.name}
