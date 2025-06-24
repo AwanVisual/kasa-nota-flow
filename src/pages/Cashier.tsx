@@ -27,6 +27,7 @@ const Cashier = () => {
   const [customerName, setCustomerName] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<string>('cash');
   const [paymentReceived, setPaymentReceived] = useState<number>(0);
+  const [bankDetails, setBankDetails] = useState('');
   const [taxRate, setTaxRate] = useState<number>(11);
 
   const { data: products } = useQuery({
@@ -115,20 +116,27 @@ const Cashier = () => {
       // Generate sale number
       const { data: saleNumber } = await supabase.rpc('generate_sale_number');
       
-      // Create sale record
+      // Create sale record with bank details if applicable
+      const saleData: any = {
+        sale_number: saleNumber,
+        customer_name: customerName || null,
+        subtotal,
+        tax_amount: taxAmount,
+        total_amount: total,
+        payment_method: paymentMethod as any,
+        payment_received: paymentReceived,
+        change_amount: change,
+        created_by: user?.id,
+      };
+
+      // Add bank details for non-cash payments
+      if (paymentMethod !== 'cash' && bankDetails) {
+        saleData.notes = `Bank Details: ${bankDetails}`;
+      }
+
       const { data: sale, error: saleError } = await supabase
         .from('sales')
-        .insert({
-          sale_number: saleNumber,
-          customer_name: customerName || null,
-          subtotal,
-          tax_amount: taxAmount,
-          total_amount: total,
-          payment_method: paymentMethod as any,
-          payment_received: paymentReceived,
-          change_amount: change,
-          created_by: user?.id,
-        })
+        .insert(saleData)
         .select()
         .single();
 
@@ -173,6 +181,7 @@ const Cashier = () => {
       setCart([]);
       setCustomerName('');
       setPaymentReceived(0);
+      setBankDetails('');
       toast({ 
         title: "Success", 
         description: `Sale ${sale.sale_number} completed successfully!` 
@@ -251,6 +260,12 @@ const Cashier = () => {
             <span>Payment (${paymentMethod}):</span>
             <span>${formatCurrency(paymentReceived)}</span>
           </div>
+          ${bankDetails && paymentMethod !== 'cash' ? `
+          <div style="display: flex; justify-content: space-between; font-size: 12px;">
+            <span>Bank Details:</span>
+            <span>${bankDetails}</span>
+          </div>
+          ` : ''}
           <div style="display: flex; justify-content: space-between;">
             <span>Change:</span>
             <span>${formatCurrency(change)}</span>
@@ -397,6 +412,18 @@ const Cashier = () => {
                       </SelectContent>
                     </Select>
                   </div>
+
+                  {paymentMethod !== 'cash' && (
+                    <div>
+                      <Label htmlFor="bankDetails">Bank Details</Label>
+                      <Input
+                        id="bankDetails"
+                        value={bankDetails}
+                        onChange={(e) => setBankDetails(e.target.value)}
+                        placeholder="Enter bank name, account number, etc."
+                      />
+                    </div>
+                  )}
 
                   <div>
                     <Label htmlFor="paymentReceived">Payment Received</Label>

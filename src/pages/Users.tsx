@@ -32,6 +32,38 @@ const Users = () => {
     },
   });
 
+  const createUserMutation = useMutation({
+    mutationFn: async ({ email, password, full_name, role }: any) => {
+      const { data, error } = await supabase.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+        user_metadata: { full_name }
+      });
+
+      if (error) throw error;
+
+      // Update the user's profile with the role
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({ role })
+        .eq('id', data.user.id);
+
+      if (profileError) throw profileError;
+
+      return data.user;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      setIsDialogOpen(false);
+      setEditingUser(null);
+      toast({ title: "Success", description: "User created successfully" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
   const updateUserMutation = useMutation({
     mutationFn: async ({ id, ...userData }: any) => {
       const { error } = await supabase
@@ -62,6 +94,10 @@ const Users = () => {
 
     if (editingUser) {
       updateUserMutation.mutate({ id: editingUser.id, ...userData });
+    } else {
+      const email = formData.get('email') as string;
+      const password = formData.get('password') as string;
+      createUserMutation.mutate({ email, password, ...userData });
     }
   };
 
@@ -107,7 +143,7 @@ const Users = () => {
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
-            <Button onClick={() => setEditingUser(null)} disabled>
+            <Button onClick={() => setEditingUser(null)}>
               <Plus className="h-4 w-4 mr-2" />
               Add User
             </Button>
@@ -119,6 +155,32 @@ const Users = () => {
               </DialogTitle>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
+              {!editingUser && (
+                <>
+                  <div>
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      name="email"
+                      type="email"
+                      required
+                      placeholder="user@example.com"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="password">Password</Label>
+                    <Input
+                      id="password"
+                      name="password"
+                      type="password"
+                      required
+                      placeholder="Minimum 6 characters"
+                      minLength={6}
+                    />
+                  </div>
+                </>
+              )}
+              
               <div>
                 <Label htmlFor="full_name">Full Name</Label>
                 <Input
@@ -147,7 +209,7 @@ const Users = () => {
                 <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
                   Cancel
                 </Button>
-                <Button type="submit">
+                <Button type="submit" disabled={createUserMutation.isPending || updateUserMutation.isPending}>
                   {editingUser ? 'Update' : 'Create'} User
                 </Button>
               </div>
