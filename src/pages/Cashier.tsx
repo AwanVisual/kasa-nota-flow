@@ -277,49 +277,6 @@ const Cashier = () => {
     }
   };
 
-  const addToCart = (product: any) => {
-    setCart(prev => {
-      const existing = prev.find(item => item.product.id === product.id);
-      if (existing) {
-        if (existing.quantity < product.stock_quantity) {
-          return prev.map(item =>
-            item.product.id === product.id
-              ? { ...item, quantity: item.quantity + 1 }
-              : item
-          );
-        } else {
-          toast({ title: "Error", description: "Not enough stock", variant: "destructive" });
-          return prev;
-        }
-      }
-      return [...prev, { product, quantity: 1 }];
-    });
-  };
-
-  const updateQuantity = (productId: string, newQuantity: number) => {
-    if (newQuantity <= 0) {
-      removeFromCart(productId);
-      return;
-    }
-
-    setCart(prev =>
-      prev.map(item => {
-        if (item.product.id === productId) {
-          if (newQuantity <= item.product.stock_quantity) {
-            return { ...item, quantity: newQuantity };
-          } else {
-            toast({ title: "Error", description: "Not enough stock", variant: "destructive" });
-          }
-        }
-        return item;
-      })
-    );
-  };
-
-  const removeFromCart = (productId: string) => {
-    setCart(prev => prev.filter(item => item.product.id !== productId));
-  };
-
   return (
     <div className="space-y-6">
       <h1 className="text-3xl font-bold text-gray-900">Cashier</h1>
