@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -24,6 +23,7 @@ interface ReceiptFieldsConfig {
   showDppFaktur: boolean;
   showDiscount: boolean;
   showPpn11: boolean;
+  discountPercentage: number;
 }
 
 const Cashier = () => {
@@ -42,6 +42,7 @@ const Cashier = () => {
     showDppFaktur: false,
     showDiscount: false,
     showPpn11: false,
+    discountPercentage: 0,
   });
 
   const { data: products } = useQuery({
@@ -127,8 +128,8 @@ const Cashier = () => {
     // Don't automatically proceed - let user manually complete the sale
     setShowPreCheckout(false);
     toast({ 
-      title: "Receipt Configuration Updated", 
-      description: "You can now complete the sale with your selected receipt options." 
+      title: "Special Customer Pricing Applied", 
+      description: `Discount: ${config.discountPercentage}%. You can now complete the sale with the configured pricing.` 
     });
   };
 
@@ -233,15 +234,22 @@ const Cashier = () => {
     
     const amount = quantity * price;
     const dpp11 = (100 / 111) * price;
-    const discount8 = 0.08 * dpp11;
-    const dppFaktur = dpp11 - discount8;
+    const discount = (receiptConfig.discountPercentage / 100) * dpp11;
+    const dppFaktur = dpp11 - discount;
+    const dppLain = (11 / 12) * dppFaktur;
+    
+    // PPN 11% and PPN 12% must return the same value
     const ppn11 = 0.11 * dppFaktur;
+    const ppn12 = ppn11; // Same value as PPN 11%
     
     return {
       amount,
+      dpp11: dpp11 * quantity,
+      discount: discount * quantity,
       dppFaktur: dppFaktur * quantity,
-      discount8: discount8 * quantity,
+      dppLain: dppLain * quantity,
       ppn11: ppn11 * quantity,
+      ppn12: ppn12 * quantity,
     };
   };
 
@@ -254,15 +262,16 @@ const Cashier = () => {
     const receiptFooter = settings?.receipt_footer || 'Have a great day!';
     const showTaxDetails = settings?.show_tax_details === 'true';
 
-    // Calculate detailed pricing totals for receipt
+    // Calculate detailed pricing totals for receipt using the configured discount
     const detailedTotals = cart.reduce((totals, item) => {
       const itemCalc = calculateDetailedPricing(item);
       return {
+        amount: totals.amount + itemCalc.amount,
+        discount: totals.discount + itemCalc.discount,
         dppFaktur: totals.dppFaktur + itemCalc.dppFaktur,
-        discount8: totals.discount8 + itemCalc.discount8,
         ppn11: totals.ppn11 + itemCalc.ppn11,
       };
-    }, { dppFaktur: 0, discount8: 0, ppn11: 0 });
+    }, { amount: 0, discount: 0, dppFaktur: 0, ppn11: 0 });
     
     const receiptContent = `
       <div style="font-family: Arial, sans-serif; max-width: 300px; margin: 0 auto; padding: 20px;">
@@ -278,6 +287,7 @@ const Cashier = () => {
           <p>No: ${sale.sale_number}</p>
           <p>Date: ${new Date(sale.created_at).toLocaleString('id-ID')}</p>
           ${sale.customer_name ? `<p>Customer: ${sale.customer_name}</p>` : ''}
+          ${receiptConfig.discountPercentage > 0 ? `<p><strong>Special Customer (${receiptConfig.discountPercentage}% Discount)</strong></p>` : ''}
         </div>
         
         <table style="width: 100%; border-collapse: collapse;">
@@ -302,20 +312,26 @@ const Cashier = () => {
         </table>
         
         <div style="margin-top: 20px; border-top: 1px solid #000; padding-top: 10px;">
+          ${receiptConfig.showAmount ? `
+          <div style="display: flex; justify-content: space-between;">
+            <span>Amount:</span>
+            <span>${formatCurrency(detailedTotals.amount)}</span>
+          </div>
+          ` : ''}
           <div style="display: flex; justify-content: space-between;">
             <span>Subtotal:</span>
             <span>${formatCurrency(subtotal)}</span>
           </div>
+          ${receiptConfig.showDiscount && receiptConfig.discountPercentage > 0 ? `
+          <div style="display: flex; justify-content: space-between;">
+            <span>Discount (${receiptConfig.discountPercentage}%):</span>
+            <span>-${formatCurrency(detailedTotals.discount)}</span>
+          </div>
+          ` : ''}
           ${receiptConfig.showDppFaktur ? `
           <div style="display: flex; justify-content: space-between;">
             <span>DPP Faktur:</span>
             <span>${formatCurrency(detailedTotals.dppFaktur)}</span>
-          </div>
-          ` : ''}
-          ${receiptConfig.showDiscount ? `
-          <div style="display: flex; justify-content: space-between;">
-            <span>Discount 8%:</span>
-            <span>${formatCurrency(detailedTotals.discount8)}</span>
           </div>
           ` : ''}
           ${showTaxDetails ? `
@@ -406,6 +422,11 @@ const Cashier = () => {
             <CardTitle className="flex items-center">
               <ShoppingCart className="h-5 w-5 mr-2" />
               Shopping Cart
+              {receiptConfig.discountPercentage > 0 && (
+                <Badge variant="secondary" className="ml-2">
+                  Special Customer ({receiptConfig.discountPercentage}% Discount)
+                </Badge>
+              )}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -537,7 +558,7 @@ const Cashier = () => {
                       disabled={cart.length === 0}
                     >
                       <Calculator className="h-4 w-4 mr-2" />
-                      Pre-Checkout Breakdown (Optional)
+                      Special Customer Pricing (Optional)
                     </Button>
 
                     <Button

@@ -1,22 +1,17 @@
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
 import { formatCurrency } from '@/lib/utils';
-import { Calculator, Receipt } from 'lucide-react';
 
 interface CartItem {
   product: any;
   quantity: number;
-}
-
-interface PreCheckoutDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  cart: CartItem[];
-  onProceedToPayment: (receiptFields: ReceiptFieldsConfig) => void;
 }
 
 interface ReceiptFieldsConfig {
@@ -24,267 +19,267 @@ interface ReceiptFieldsConfig {
   showDppFaktur: boolean;
   showDiscount: boolean;
   showPpn11: boolean;
+  discountPercentage: number;
 }
 
-interface ItemCalculations {
-  amount: number;
-  dpp11: number;
-  discount8: number;
-  dppFaktur: number;
-  dppLain: number;
-  ppn12: number;
-  ppn11: number;
+interface PreCheckoutDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  cart: CartItem[];
+  onProceedToPayment: (config: ReceiptFieldsConfig) => void;
 }
 
-const PreCheckoutDialog: React.FC<PreCheckoutDialogProps> = ({
-  open,
-  onOpenChange,
-  cart,
-  onProceedToPayment
-}) => {
-  const [receiptFields, setReceiptFields] = useState<ReceiptFieldsConfig>({
+const PreCheckoutDialog = ({ open, onOpenChange, cart, onProceedToPayment }: PreCheckoutDialogProps) => {
+  const [receiptConfig, setReceiptConfig] = useState<ReceiptFieldsConfig>({
     showAmount: true,
     showDppFaktur: false,
     showDiscount: false,
     showPpn11: false,
+    discountPercentage: 0,
   });
 
-  // Calculate detailed pricing for each item
-  const calculateItemDetails = (item: CartItem): ItemCalculations => {
+  const calculateDetailedPricing = (item: CartItem) => {
     const price = Number(item.product.price);
     const quantity = item.quantity;
     
-    // Amount = Quantity × Price
     const amount = quantity * price;
-    
-    // DPP 11% = (100 / 111) × Price
     const dpp11 = (100 / 111) * price;
-    
-    // Discount 8% = 8% × DPP 11%
-    const discount8 = 0.08 * dpp11;
-    
-    // DPP Faktur = DPP 11% - Discount
-    const dppFaktur = dpp11 - discount8;
-    
-    // DPP Lain = (11 / 12) × DPP Faktur
+    const discount = (receiptConfig.discountPercentage / 100) * dpp11;
+    const dppFaktur = dpp11 - discount;
     const dppLain = (11 / 12) * dppFaktur;
     
-    // PPN calculations (should result in same value)
-    const ppn12 = 0.12 * dppFaktur;
+    // PPN 11% and PPN 12% must return the same value
     const ppn11 = 0.11 * dppFaktur;
+    const ppn12 = ppn11; // Same value as PPN 11%
     
     return {
       amount,
       dpp11: dpp11 * quantity,
-      discount8: discount8 * quantity,
+      discount: discount * quantity,
       dppFaktur: dppFaktur * quantity,
       dppLain: dppLain * quantity,
-      ppn12: ppn12 * quantity,
       ppn11: ppn11 * quantity,
+      ppn12: ppn12 * quantity,
     };
   };
 
-  // Calculate totals for all items
   const calculateTotals = () => {
     return cart.reduce((totals, item) => {
-      const itemCalc = calculateItemDetails(item);
+      const itemCalc = calculateDetailedPricing(item);
       return {
         amount: totals.amount + itemCalc.amount,
         dpp11: totals.dpp11 + itemCalc.dpp11,
-        discount8: totals.discount8 + itemCalc.discount8,
+        discount: totals.discount + itemCalc.discount,
         dppFaktur: totals.dppFaktur + itemCalc.dppFaktur,
         dppLain: totals.dppLain + itemCalc.dppLain,
-        ppn12: totals.ppn12 + itemCalc.ppn12,
         ppn11: totals.ppn11 + itemCalc.ppn11,
+        ppn12: totals.ppn12 + itemCalc.ppn12,
       };
     }, {
       amount: 0,
       dpp11: 0,
-      discount8: 0,
+      discount: 0,
       dppFaktur: 0,
       dppLain: 0,
-      ppn12: 0,
       ppn11: 0,
+      ppn12: 0,
     });
   };
 
   const totals = calculateTotals();
 
-  const handleFieldChange = (field: keyof ReceiptFieldsConfig, checked: boolean) => {
-    setReceiptFields(prev => ({
-      ...prev,
-      [field]: checked
-    }));
-  };
-
-  const handleProceedToPayment = () => {
-    onProceedToPayment(receiptFields);
-    onOpenChange(false);
+  const handleProceed = () => {
+    onProceedToPayment(receiptConfig);
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center">
-            <Calculator className="h-5 w-5 mr-2" />
-            Pre-Checkout Pricing Breakdown
-          </DialogTitle>
+          <DialogTitle>Pre-Checkout Pricing Breakdown (Special Customer)</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-6">
-          {/* Item-wise calculations */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold">Item Details</h3>
-            {cart.map((item, index) => {
-              const itemCalc = calculateItemDetails(item);
-              return (
-                <Card key={item.product.id} className="p-4">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base">
-                      {item.product.name} (Qty: {item.quantity})
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                    <div>
-                      <span className="text-muted-foreground">Amount:</span>
-                      <div className="font-medium">{formatCurrency(itemCalc.amount)}</div>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">DPP 11%:</span>
-                      <div className="font-medium">{formatCurrency(itemCalc.dpp11)}</div>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Discount 8%:</span>
-                      <div className="font-medium">{formatCurrency(itemCalc.discount8)}</div>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">DPP Faktur:</span>
-                      <div className="font-medium">{formatCurrency(itemCalc.dppFaktur)}</div>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">DPP Lain:</span>
-                      <div className="font-medium">{formatCurrency(itemCalc.dppLain)}</div>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">PPN 12%:</span>
-                      <div className="font-medium">{formatCurrency(itemCalc.ppn12)}</div>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">PPN 11%:</span>
-                      <div className="font-medium">{formatCurrency(itemCalc.ppn11)}</div>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-
-          {/* Total calculations */}
+          {/* Discount Configuration */}
           <Card>
             <CardHeader>
-              <CardTitle>Total Breakdown</CardTitle>
+              <CardTitle className="text-lg">Discount Configuration</CardTitle>
             </CardHeader>
-            <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div>
-                <span className="text-muted-foreground">Total Amount:</span>
-                <div className="font-bold text-lg">{formatCurrency(totals.amount)}</div>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Total DPP 11%:</span>
-                <div className="font-medium text-red-600">{formatCurrency(totals.dpp11)}</div>
-                <small className="text-xs text-muted-foreground">(Hidden on receipt)</small>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Total Discount 8%:</span>
-                <div className="font-medium">{formatCurrency(totals.discount8)}</div>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Total DPP Faktur:</span>
-                <div className="font-medium">{formatCurrency(totals.dppFaktur)}</div>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Total DPP Lain:</span>
-                <div className="font-medium text-red-600">{formatCurrency(totals.dppLain)}</div>
-                <small className="text-xs text-muted-foreground">(Hidden on receipt)</small>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Total PPN 12%:</span>
-                <div className="font-medium text-red-600">{formatCurrency(totals.ppn12)}</div>
-                <small className="text-xs text-muted-foreground">(Hidden on receipt)</small>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Total PPN 11%:</span>
-                <div className="font-medium">{formatCurrency(totals.ppn11)}</div>
+            <CardContent>
+              <div className="flex items-center space-x-4">
+                <Label htmlFor="discountPercentage">Discount Percentage:</Label>
+                <Input
+                  id="discountPercentage"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  max="100"
+                  value={receiptConfig.discountPercentage}
+                  onChange={(e) => setReceiptConfig(prev => ({
+                    ...prev,
+                    discountPercentage: parseFloat(e.target.value) || 0
+                  }))}
+                  className="w-24"
+                />
+                <span>%</span>
               </div>
             </CardContent>
           </Card>
 
-          {/* Receipt field selection */}
+          {/* Item-by-Item Breakdown */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center">
-                <Receipt className="h-5 w-5 mr-2" />
-                Receipt Configuration
-              </CardTitle>
+              <CardTitle className="text-lg">Item Breakdown</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Select which calculated fields should appear on the printed receipt. 
-                Fields marked in red are always hidden from receipts.
-              </p>
+            <CardContent>
+              <div className="space-y-4">
+                {cart.map((item, index) => {
+                  const calc = calculateDetailedPricing(item);
+                  return (
+                    <div key={item.product.id} className="border rounded-lg p-4">
+                      <h4 className="font-medium mb-3">
+                        {item.product.name} (Qty: {item.quantity})
+                      </h4>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div>
+                          <span className="text-muted-foreground">Amount:</span>
+                          <div className="font-medium">{formatCurrency(calc.amount)}</div>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">DPP 11%:</span>
+                          <div className="font-medium text-gray-500">{formatCurrency(calc.dpp11)}</div>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Discount ({receiptConfig.discountPercentage}%):</span>
+                          <div className="font-medium">{formatCurrency(calc.discount)}</div>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">DPP Faktur:</span>
+                          <div className="font-medium">{formatCurrency(calc.dppFaktur)}</div>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">DPP Lain:</span>
+                          <div className="font-medium text-gray-500">{formatCurrency(calc.dppLain)}</div>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">PPN 11%:</span>
+                          <div className="font-medium">{formatCurrency(calc.ppn11)}</div>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">PPN 12%:</span>
+                          <div className="font-medium text-gray-500">{formatCurrency(calc.ppn12)}</div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Summary Totals */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Summary Totals</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="text-center p-3 bg-blue-50 rounded-lg">
+                  <div className="text-sm text-muted-foreground">Total Amount</div>
+                  <div className="font-bold text-lg">{formatCurrency(totals.amount)}</div>
+                </div>
+                <div className="text-center p-3 bg-gray-50 rounded-lg">
+                  <div className="text-sm text-muted-foreground">DPP 11% (Hidden)</div>
+                  <div className="font-medium text-gray-500">{formatCurrency(totals.dpp11)}</div>
+                </div>
+                <div className="text-center p-3 bg-red-50 rounded-lg">
+                  <div className="text-sm text-muted-foreground">Total Discount</div>
+                  <div className="font-bold text-red-600">{formatCurrency(totals.discount)}</div>
+                </div>
+                <div className="text-center p-3 bg-green-50 rounded-lg">
+                  <div className="text-sm text-muted-foreground">DPP Faktur</div>
+                  <div className="font-bold text-green-600">{formatCurrency(totals.dppFaktur)}</div>
+                </div>
+                <div className="text-center p-3 bg-gray-50 rounded-lg">
+                  <div className="text-sm text-muted-foreground">DPP Lain (Hidden)</div>
+                  <div className="font-medium text-gray-500">{formatCurrency(totals.dppLain)}</div>
+                </div>
+                <div className="text-center p-3 bg-blue-50 rounded-lg">
+                  <div className="text-sm text-muted-foreground">PPN 11%</div>
+                  <div className="font-bold text-blue-600">{formatCurrency(totals.ppn11)}</div>
+                </div>
+                <div className="text-center p-3 bg-gray-50 rounded-lg">
+                  <div className="text-sm text-muted-foreground">PPN 12% (Hidden)</div>
+                  <div className="font-medium text-gray-500">{formatCurrency(totals.ppn12)}</div>
+                </div>
+              </div>
               
+              <Separator className="my-4" />
+              
+              <div className="text-center">
+                <div className="text-sm text-muted-foreground mb-1">Final Total (DPP Faktur + PPN 11%)</div>
+                <div className="text-2xl font-bold text-primary">
+                  {formatCurrency(totals.dppFaktur + totals.ppn11)}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Receipt Configuration */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Receipt Display Options</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Select which fields will appear on the printed receipt. 
+                <br />
+                <em>Note: DPP 11%, DPP Lain, and PPN 12% are always hidden from receipt.</em>
+              </p>
+            </CardHeader>
+            <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="flex items-center space-x-2">
                   <Checkbox
                     id="showAmount"
-                    checked={receiptFields.showAmount}
-                    onCheckedChange={(checked) => handleFieldChange('showAmount', !!checked)}
+                    checked={receiptConfig.showAmount}
+                    onCheckedChange={(checked) => 
+                      setReceiptConfig(prev => ({ ...prev, showAmount: checked as boolean }))
+                    }
                   />
-                  <label htmlFor="showAmount" className="text-sm font-medium">
-                    Show Amount on Receipt
-                  </label>
+                  <Label htmlFor="showAmount">Show Amount</Label>
                 </div>
-                
+
                 <div className="flex items-center space-x-2">
                   <Checkbox
                     id="showDppFaktur"
-                    checked={receiptFields.showDppFaktur}
-                    onCheckedChange={(checked) => handleFieldChange('showDppFaktur', !!checked)}
+                    checked={receiptConfig.showDppFaktur}
+                    onCheckedChange={(checked) => 
+                      setReceiptConfig(prev => ({ ...prev, showDppFaktur: checked as boolean }))
+                    }
                   />
-                  <label htmlFor="showDppFaktur" className="text-sm font-medium">
-                    Show DPP Faktur on Receipt
-                  </label>
+                  <Label htmlFor="showDppFaktur">Show DPP Faktur</Label>
                 </div>
-                
+
                 <div className="flex items-center space-x-2">
                   <Checkbox
                     id="showDiscount"
-                    checked={receiptFields.showDiscount}
-                    onCheckedChange={(checked) => handleFieldChange('showDiscount', !!checked)}
+                    checked={receiptConfig.showDiscount}
+                    onCheckedChange={(checked) => 
+                      setReceiptConfig(prev => ({ ...prev, showDiscount: checked as boolean }))
+                    }
                   />
-                  <label htmlFor="showDiscount" className="text-sm font-medium">
-                    Show Discount 8% on Receipt
-                  </label>
+                  <Label htmlFor="showDiscount">Show Discount</Label>
                 </div>
-                
+
                 <div className="flex items-center space-x-2">
                   <Checkbox
                     id="showPpn11"
-                    checked={receiptFields.showPpn11}
-                    onCheckedChange={(checked) => handleFieldChange('showPpn11', !!checked)}
+                    checked={receiptConfig.showPpn11}
+                    onCheckedChange={(checked) => 
+                      setReceiptConfig(prev => ({ ...prev, showPpn11: checked as boolean }))
+                    }
                   />
-                  <label htmlFor="showPpn11" className="text-sm font-medium">
-                    Show PPN 11% on Receipt
-                  </label>
+                  <Label htmlFor="showPpn11">Show PPN 11%</Label>
                 </div>
-              </div>
-              
-              <div className="mt-4 p-3 bg-muted rounded-md">
-                <p className="text-sm text-muted-foreground">
-                  <strong>Note:</strong> DPP 11%, DPP Lain, and PPN 12% are always hidden from receipts 
-                  and cannot be selected.
-                </p>
               </div>
             </CardContent>
           </Card>
@@ -294,8 +289,8 @@ const PreCheckoutDialog: React.FC<PreCheckoutDialogProps> = ({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={handleProceedToPayment}>
-            Proceed to Payment
+          <Button onClick={handleProceed}>
+            Apply Configuration & Continue
           </Button>
         </DialogFooter>
       </DialogContent>
