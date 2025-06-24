@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -7,16 +6,23 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Minus, ShoppingCart, Trash2, Receipt } from 'lucide-react';
+import { Plus, Minus, ShoppingCart, Trash2, Receipt, Calculator } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
+import PreCheckoutDialog from '@/components/PreCheckoutDialog';
 
 interface CartItem {
   product: any;
   quantity: number;
+}
+
+interface ReceiptFieldsConfig {
+  showAmount: boolean;
+  showDppFaktur: boolean;
+  showDiscount: boolean;
+  showPpn11: boolean;
 }
 
 const Cashier = () => {
@@ -29,6 +35,13 @@ const Cashier = () => {
   const [paymentReceived, setPaymentReceived] = useState<number>(0);
   const [bankDetails, setBankDetails] = useState('');
   const [taxRate, setTaxRate] = useState<number>(11);
+  const [showPreCheckout, setShowPreCheckout] = useState(false);
+  const [receiptConfig, setReceiptConfig] = useState<ReceiptFieldsConfig>({
+    showAmount: true,
+    showDppFaktur: false,
+    showDiscount: false,
+    showPpn11: false,
+  });
 
   const { data: products } = useQuery({
     queryKey: ['products'],
@@ -106,6 +119,12 @@ const Cashier = () => {
 
   const removeFromCart = (productId: string) => {
     setCart(prev => prev.filter(item => item.product.id !== productId));
+  };
+
+  const handlePreCheckoutProceed = (config: ReceiptFieldsConfig) => {
+    setReceiptConfig(config);
+    // Automatically proceed to complete sale after pre-checkout
+    processSaleMutation.mutate();
   };
 
   const processSaleMutation = useMutation({
@@ -195,6 +214,24 @@ const Cashier = () => {
     },
   });
 
+  const calculateDetailedPricing = (item: CartItem) => {
+    const price = Number(item.product.price);
+    const quantity = item.quantity;
+    
+    const amount = quantity * price;
+    const dpp11 = (100 / 111) * price;
+    const discount8 = 0.08 * dpp11;
+    const dppFaktur = dpp11 - discount8;
+    const ppn11 = 0.11 * dppFaktur;
+    
+    return {
+      amount,
+      dppFaktur: dppFaktur * quantity,
+      discount8: discount8 * quantity,
+      ppn11: ppn11 * quantity,
+    };
+  };
+
   const generateReceipt = (sale: any) => {
     const logoUrl = settings?.company_logo ? settings.company_logo : '';
     const storeName = settings?.store_name || 'Your Store';
@@ -203,6 +240,16 @@ const Cashier = () => {
     const receiptHeader = settings?.receipt_header || 'Thank you for your purchase!';
     const receiptFooter = settings?.receipt_footer || 'Have a great day!';
     const showTaxDetails = settings?.show_tax_details === 'true';
+
+    // Calculate detailed pricing totals for receipt
+    const detailedTotals = cart.reduce((totals, item) => {
+      const itemCalc = calculateDetailedPricing(item);
+      return {
+        dppFaktur: totals.dppFaktur + itemCalc.dppFaktur,
+        discount8: totals.discount8 + itemCalc.discount8,
+        ppn11: totals.ppn11 + itemCalc.ppn11,
+      };
+    }, { dppFaktur: 0, discount8: 0, ppn11: 0 });
     
     const receiptContent = `
       <div style="font-family: Arial, sans-serif; max-width: 300px; margin: 0 auto; padding: 20px;">
@@ -246,10 +293,28 @@ const Cashier = () => {
             <span>Subtotal:</span>
             <span>${formatCurrency(subtotal)}</span>
           </div>
+          ${receiptConfig.showDppFaktur ? `
+          <div style="display: flex; justify-content: space-between;">
+            <span>DPP Faktur:</span>
+            <span>${formatCurrency(detailedTotals.dppFaktur)}</span>
+          </div>
+          ` : ''}
+          ${receiptConfig.showDiscount ? `
+          <div style="display: flex; justify-content: space-between;">
+            <span>Discount 8%:</span>
+            <span>${formatCurrency(detailedTotals.discount8)}</span>
+          </div>
+          ` : ''}
           ${showTaxDetails ? `
           <div style="display: flex; justify-content: space-between;">
             <span>Tax (${taxRate}%):</span>
             <span>${formatCurrency(taxAmount)}</span>
+          </div>
+          ` : ''}
+          ${receiptConfig.showPpn11 ? `
+          <div style="display: flex; justify-content: space-between;">
+            <span>PPN 11%:</span>
+            <span>${formatCurrency(detailedTotals.ppn11)}</span>
           </div>
           ` : ''}
           <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 18px;">
@@ -445,20 +510,39 @@ const Cashier = () => {
                     </div>
                   )}
 
-                  <Button
-                    className="w-full"
-                    onClick={() => processSaleMutation.mutate()}
-                    disabled={cart.length === 0 || paymentReceived < total || processSaleMutation.isPending}
-                  >
-                    <Receipt className="h-4 w-4 mr-2" />
-                    {processSaleMutation.isPending ? 'Processing...' : 'Complete Sale'}
-                  </Button>
+                  <div className="space-y-2">
+                    <Button
+                      className="w-full"
+                      variant="outline"
+                      onClick={() => setShowPreCheckout(true)}
+                      disabled={cart.length === 0}
+                    >
+                      <Calculator className="h-4 w-4 mr-2" />
+                      Pre-Checkout Breakdown
+                    </Button>
+
+                    <Button
+                      className="w-full"
+                      onClick={() => processSaleMutation.mutate()}
+                      disabled={cart.length === 0 || paymentReceived < total || processSaleMutation.isPending}
+                    >
+                      <Receipt className="h-4 w-4 mr-2" />
+                      {processSaleMutation.isPending ? 'Processing...' : 'Complete Sale'}
+                    </Button>
+                  </div>
                 </div>
               </>
             )}
           </CardContent>
         </Card>
       </div>
+
+      <PreCheckoutDialog
+        open={showPreCheckout}
+        onOpenChange={setShowPreCheckout}
+        cart={cart}
+        onProceedToPayment={handlePreCheckoutProceed}
+      />
     </div>
   );
 };
