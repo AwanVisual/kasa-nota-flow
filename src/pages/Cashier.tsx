@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -123,14 +124,25 @@ const Cashier = () => {
 
   const handlePreCheckoutProceed = (config: ReceiptFieldsConfig) => {
     setReceiptConfig(config);
-    // Automatically proceed to complete sale after pre-checkout
-    processSaleMutation.mutate();
+    // Don't automatically proceed - let user manually complete the sale
+    setShowPreCheckout(false);
+    toast({ 
+      title: "Receipt Configuration Updated", 
+      description: "You can now complete the sale with your selected receipt options." 
+    });
   };
 
   const processSaleMutation = useMutation({
     mutationFn: async () => {
       if (cart.length === 0) throw new Error('Cart is empty');
-      if (paymentReceived < total) throw new Error('Insufficient payment');
+      
+      // Fix: Ensure payment validation is correct
+      const totalAmount = subtotal + taxAmount;
+      console.log('Payment validation:', { paymentReceived, totalAmount, sufficient: paymentReceived >= totalAmount });
+      
+      if (paymentReceived < totalAmount) {
+        throw new Error(`Insufficient payment. Required: ${formatCurrency(totalAmount)}, Received: ${formatCurrency(paymentReceived)}`);
+      }
 
       // Generate sale number
       const { data: saleNumber } = await supabase.rpc('generate_sale_number');
@@ -141,10 +153,10 @@ const Cashier = () => {
         customer_name: customerName || null,
         subtotal,
         tax_amount: taxAmount,
-        total_amount: total,
+        total_amount: totalAmount,
         payment_method: paymentMethod as any,
         payment_received: paymentReceived,
-        change_amount: change,
+        change_amount: Math.max(0, paymentReceived - totalAmount),
         created_by: user?.id,
       };
 
@@ -210,6 +222,7 @@ const Cashier = () => {
       generateReceipt(sale);
     },
     onError: (error: any) => {
+      console.error('Sale processing error:', error);
       toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
@@ -495,6 +508,7 @@ const Cashier = () => {
                     <Input
                       id="paymentReceived"
                       type="number"
+                      step="0.01"
                       value={paymentReceived}
                       onChange={(e) => setPaymentReceived(parseFloat(e.target.value) || 0)}
                       placeholder="Enter payment amount"
@@ -507,6 +521,11 @@ const Cashier = () => {
                       <span className={change < 0 ? "text-red-600" : "text-green-600"}>
                         {formatCurrency(Math.max(0, change))}
                       </span>
+                      {change < 0 && (
+                        <span className="text-red-600 text-sm">
+                          Insufficient: {formatCurrency(Math.abs(change))} short
+                        </span>
+                      )}
                     </div>
                   )}
 
@@ -518,7 +537,7 @@ const Cashier = () => {
                       disabled={cart.length === 0}
                     >
                       <Calculator className="h-4 w-4 mr-2" />
-                      Pre-Checkout Breakdown
+                      Pre-Checkout Breakdown (Optional)
                     </Button>
 
                     <Button
